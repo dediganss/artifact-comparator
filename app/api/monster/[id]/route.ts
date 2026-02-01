@@ -13,19 +13,22 @@ type MonsterDetail = {
   leader_skill: number | null;
 };
 
+type Params = { id: string };
+
+// ✅ Compatível: Next pode fornecer params como objeto OU Promise
+type RouteContext = { params: Params | Promise<Params> };
+
 const SWARFARM_API_ROOT = "https://swarfarm.com/api/v2";
 
-export async function GET(
-  _req: Request,
-  ctx: { params: { id: string } }
-): Promise<Response> {
-  const id = Number(ctx.params.id);
+export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
+  const params = await Promise.resolve(ctx.params);
+  const idNum = Number(params.id);
 
-  if (!Number.isFinite(id) || id <= 0) {
+  if (!Number.isFinite(idNum) || idNum <= 0) {
     return Response.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const url = `${SWARFARM_API_ROOT}/monsters/${id}/`;
+  const url = `${SWARFARM_API_ROOT}/monsters/${idNum}/`;
 
   try {
     const res = await fetch(url, {
@@ -44,6 +47,7 @@ export async function GET(
 
     return Response.json(data, {
       headers: {
+        // Cache na :contentReference[oaicite:0]{index=0} + revalidação em background
         "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
       },
     });
