@@ -1,6 +1,3 @@
-export const revalidate = 60 * 60 * 24; // 24h
-export const dynamic = "force-static";
-
 type MonsterListItem = { id: number; name: string; element: string | null };
 
 type SwarfarmMonster = {
@@ -19,12 +16,13 @@ type SwarfarmPagedResponse<T> = {
 
 type ApiResponse = { results: MonsterListItem[] };
 
+const REVALIDATE_SECONDS = 86400; // 24h
 const SWARFARM_FIRST_PAGE = "https://swarfarm.com/api/v2/monsters/?page=1";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
-    next: { revalidate },
+    next: { revalidate: REVALIDATE_SECONDS },
   });
 
   if (!res.ok) {
@@ -39,7 +37,7 @@ async function fetchAllMonsters(): Promise<SwarfarmMonster[]> {
   let nextUrl: string | null = SWARFARM_FIRST_PAGE;
 
   while (nextUrl) {
-    // ✅ NÃO use "page" aqui — e tipa explicitamente:
+    // ✅ tipo explícito (resolve o ts(7022) de vez)
     const pageData: SwarfarmPagedResponse<SwarfarmMonster> =
       await fetchJson<SwarfarmPagedResponse<SwarfarmMonster>>(nextUrl);
 
@@ -66,7 +64,6 @@ export async function GET(): Promise<Response> {
 
     return Response.json(body, {
       headers: {
-        // cache no edge (:contentReference[oaicite:0]{index=0}) + revalidação em background
         "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
       },
     });

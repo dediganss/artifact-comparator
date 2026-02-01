@@ -1,6 +1,3 @@
-export const revalidate = 60 * 60 * 24; // 24h
-export const dynamic = "force-static";
-
 type MonsterDetail = {
   id: number;
   name: string;
@@ -14,10 +11,9 @@ type MonsterDetail = {
 };
 
 type Params = { id: string };
-
-// ✅ Compatível: Next pode fornecer params como objeto OU Promise
 type RouteContext = { params: Params | Promise<Params> };
 
+const REVALIDATE_SECONDS = 86400; // 24h
 const SWARFARM_API_ROOT = "https://swarfarm.com/api/v2";
 
 export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
@@ -33,7 +29,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      next: { revalidate },
+      next: { revalidate: REVALIDATE_SECONDS },
     });
 
     if (!res.ok) {
@@ -47,7 +43,6 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
 
     return Response.json(data, {
       headers: {
-        // Cache na :contentReference[oaicite:0]{index=0} + revalidação em background
         "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
       },
     });
