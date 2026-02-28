@@ -31,6 +31,8 @@ type LeaderChoice = { attr: LeaderAttrUI; amount: number };
 
 type ArtifactFlatOption = "" | "DEF" | "ATK" | "HP";
 
+type Buffs = { atk: boolean; def: boolean; spd: boolean };
+
 /* =======================
    Constants
 ======================= */
@@ -127,16 +129,19 @@ function calcTotals(
   leader: LeaderChoice,
   bonus: Stats,
   isSiege: boolean,
-  artifactFlat: Stats
+  artifactFlat: Stats,
+  buffFlat: Stats
 ) {
   const lp = leaderPct(leader);
   const siege = isSiege ? SIEGE_BONUS : { hp: 0, atk: 0, def: 0, spd: 0 };
 
   const total: Stats = {
-    hp: monster.max_lvl_hp * (1 + TOWERS.hp + lp.hp + siege.hp) + bonus.hp + artifactFlat.hp,
-    atk: monster.max_lvl_attack * (1 + TOWERS.atk + lp.atk + siege.atk) + bonus.atk + artifactFlat.atk,
-    def: monster.max_lvl_defense * (1 + TOWERS.def + lp.def + siege.def) + bonus.def + artifactFlat.def,
-    spd: monster.speed * (1 + TOWERS.spd + lp.spd + siege.spd) + bonus.spd + artifactFlat.spd,
+    hp: monster.max_lvl_hp * (1 + TOWERS.hp + lp.hp + siege.hp) + bonus.hp + artifactFlat.hp + buffFlat.hp,
+    atk:
+      monster.max_lvl_attack * (1 + TOWERS.atk + lp.atk + siege.atk) + bonus.atk + artifactFlat.atk + buffFlat.atk,
+    def:
+      monster.max_lvl_defense * (1 + TOWERS.def + lp.def + siege.def) + bonus.def + artifactFlat.def + buffFlat.def,
+    spd: monster.speed * (1 + TOWERS.spd + lp.spd + siege.spd) + bonus.spd + artifactFlat.spd + buffFlat.spd,
   };
 
   return { total };
@@ -174,13 +179,28 @@ export default function Page() {
 
   const [bonus, setBonus] = useState<Stats>({ hp: 0, atk: 0, def: 0, spd: 0 });
 
+  const [buffs, setBuffs] = useState<Buffs>({ atk: false, def: false, spd: false });
+
   const [pctA, setPctA] = useState<PercentStatsStr>({ hp: "", atk: "", def: "", spd: "" });
   const [pctB, setPctB] = useState<PercentStatsStr>({ hp: "", atk: "", def: "", spd: "" });
 
   const [artifactAFlats, setArtifactAFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
   const [artifactBFlats, setArtifactBFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
 
-  // ===== Auto-fit (sem setState dentro do effect) =====
+  const [showC, setShowC] = useState(false);
+  const [showD, setShowD] = useState(false);
+  const [pctC, setPctC] = useState<PercentStatsStr>({ hp: "", atk: "", def: "", spd: "" });
+  const [pctD, setPctD] = useState<PercentStatsStr>({ hp: "", atk: "", def: "", spd: "" });
+  const [artifactCFlats, setArtifactCFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
+  const [artifactDFlats, setArtifactDFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
+
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 769);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const lastScaleRef = useRef<number>(1);
@@ -195,6 +215,12 @@ export default function Page() {
     const applyScale = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
+        if (window.innerWidth < 769) {
+          content.style.transform = "none";
+          lastScaleRef.current = 1;
+          return;
+        }
+
         const frameW = frame.clientWidth || 1;
         const frameH = frame.clientHeight || 1;
 
@@ -266,185 +292,483 @@ export default function Page() {
 
     const flatA = sumArtifactFlats(artifactAFlats);
     const flatB = sumArtifactFlats(artifactBFlats);
+    const flatC = sumArtifactFlats(artifactCFlats);
+    const flatD = sumArtifactFlats(artifactDFlats);
 
-    const { total: totalA } = calcTotals(monster, leader, bonus, isSiege, flatA);
-    const { total: totalB } = calcTotals(monster, leader, bonus, isSiege, flatB);
+    const towered = {
+      atk: monster.max_lvl_attack * (1 + TOWERS.atk),
+      def: monster.max_lvl_defense * (1 + TOWERS.def),
+      spd: monster.speed * (1 + TOWERS.spd),
+    };
+
+    const buffFlat: Stats = {
+      hp: 0,
+      atk: buffs.atk ? Math.floor(towered.atk * 0.5) : 0,
+      def: buffs.def ? Math.floor(towered.def * 0.7) : 0,
+      spd: buffs.spd ? Math.floor(towered.spd * 0.3) : 0,
+    };
+
+    const { total: totalA } = calcTotals(monster, leader, bonus, isSiege, flatA, buffFlat);
+    const { total: totalB } = calcTotals(monster, leader, bonus, isSiege, flatB, buffFlat);
+    const { total: totalC } = calcTotals(monster, leader, bonus, isSiege, flatC, buffFlat);
+    const { total: totalD } = calcTotals(monster, leader, bonus, isSiege, flatD, buffFlat);
 
     const A = calcDamageFromPct(totalA, percentStringsToNumbers(pctA));
     const B = calcDamageFromPct(totalB, percentStringsToNumbers(pctB));
+    const C = calcDamageFromPct(totalC, percentStringsToNumbers(pctC));
+    const D = calcDamageFromPct(totalD, percentStringsToNumbers(pctD));
 
-    const winner = A.total > B.total ? "A" : A.total < B.total ? "B" : "TIE";
-    return { totalA, totalB, A, B, winner };
-  }, [monster, leader, bonus, isSiege, pctA, pctB, artifactAFlats, artifactBFlats]);
+    const entries: { key: string; total: number }[] = [
+      { key: "A", total: A.total },
+      { key: "B", total: B.total },
+      ...(showC ? [{ key: "C", total: C.total }] : []),
+      ...(showD ? [{ key: "D", total: D.total }] : []),
+    ];
+    const maxTotal = Math.max(...entries.map((e) => e.total));
+    const winners = entries.filter((e) => e.total === maxTotal).map((e) => e.key);
+    const winnerLabel = winners.length > 1 ? "Empate" : `Conjunto ${winners[0]} vence`;
+
+    return { totalA, totalB, totalC, totalD, A, B, C, D, winnerLabel, winners, maxTotal };
+  }, [monster, leader, bonus, buffs, isSiege, pctA, pctB, pctC, pctD, artifactAFlats, artifactBFlats, artifactCFlats, artifactDFlats, showC, showD]);
 
   return (
-    <main className="h-[100dvh] overflow-hidden overscroll-none bg-slate-950 text-slate-200">
-      <div ref={frameRef} className="mx-auto h-full max-w-5xl p-4 md:p-8">
-        <div ref={contentRef} className="w-full">
-          {/* Header */}
-          <header className="mb-6 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-100">Comparador de Artefatos</h1>
-            </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@400;500;600&display=swap');
 
-            {/* Siege toggle */}
-            <div className="mt-1 flex items-center gap-3">
-              <span className="text-sm text-slate-300">Siege War?</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isSiege}
+        .sw-root {
+          font-family: 'Rajdhani', sans-serif;
+          background: #07090f;
+          background-image:
+            radial-gradient(ellipse 80% 50% at 50% -10%, rgba(120,80,20,0.18) 0%, transparent 70%),
+            repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.018) 39px, rgba(255,255,255,0.018) 40px),
+            repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.018) 39px, rgba(255,255,255,0.018) 40px);
+          min-height: 100dvh;
+        }
+
+        .sw-title {
+          font-family: 'Cinzel', serif;
+          letter-spacing: 0.04em;
+          background: linear-gradient(135deg, #f5c842 0%, #e8a020 50%, #c97a10 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .sw-card {
+          background: rgb(18,22,34);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
+          backdrop-filter: blur(8px);
+          box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        .sw-card-accent {
+          background: rgb(22,20,14);
+          border: 1px solid rgba(245,200,66,0.15);
+          border-radius: 12px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(245,200,66,0.08);
+        }
+
+        .sw-section-label {
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: rgba(245,200,66,0.6);
+        }
+
+        .sw-input {
+          background: rgba(0,0,0,0.35);
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 8px;
+          color: #e8dfc0;
+          padding: 7px 12px;
+          width: 100%;
+          outline: none;
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          transition: border-color 0.15s;
+        }
+        .sw-input:focus { border-color: rgba(245,200,66,0.4); }
+        .sw-input::placeholder { color: rgba(255,255,255,0.2); }
+
+        .sw-select {
+          background: rgba(0,0,0,0.35);
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 8px;
+          color: #e8dfc0;
+          padding: 7px 12px;
+          width: 100%;
+          outline: none;
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          transition: border-color 0.15s;
+          cursor: pointer;
+          appearance: auto;
+        }
+        .sw-select:focus { border-color: rgba(245,200,66,0.4); }
+        .sw-select option { background: #12151e; color: #e8dfc0; }
+        .sw-select:disabled { opacity: 0.4; cursor: default; }
+
+        .sw-divider {
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(245,200,66,0.2), transparent);
+          margin: 0;
+        }
+
+        .sw-result-good {
+          background: rgba(16,185,129,0.07);
+          border: 1px solid rgba(16,185,129,0.25);
+          border-radius: 12px;
+          box-shadow: 0 0 20px rgba(16,185,129,0.08);
+        }
+        .sw-result-bad {
+          background: rgba(239,68,68,0.07);
+          border: 1px solid rgba(239,68,68,0.2);
+          border-radius: 12px;
+        }
+        .sw-result-neutral {
+          background: rgb(18,22,34);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
+        }
+
+        .sw-winner-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 14px;
+          border-radius: 9999px;
+          background: rgba(245,200,66,0.1);
+          border: 1px solid rgba(245,200,66,0.3);
+          font-size: 13px;
+          font-weight: 600;
+          color: #f5c842;
+          letter-spacing: 0.05em;
+        }
+
+        .sw-artifact-label {
+          font-family: 'Cinzel', serif;
+          font-size: 13px;
+          color: rgba(245,200,66,0.8);
+          letter-spacing: 0.06em;
+        }
+
+        .sw-stat-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 0;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+          font-size: 13px;
+        }
+        .sw-stat-row:last-child { border-bottom: none; }
+
+        .sw-siege-pill {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 6px 14px;
+          border-radius: 9999px;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+        }
+
+        /* ── Responsive layout ── */
+        .sw-main-grid {
+          display: grid;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+        .sw-cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+        .sw-add-btn {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border: 2px dashed rgba(245,200,66,0.2);
+          border-radius: 12px;
+          background: rgba(245,200,66,0.03);
+          cursor: pointer;
+          transition: border-color 0.2s, background 0.2s;
+          min-height: 80px;
+          padding: 16px;
+          color: rgba(245,200,66,0.4);
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+        }
+        .sw-add-btn:hover {
+          border-color: rgba(245,200,66,0.5);
+          background: rgba(245,200,66,0.07);
+          color: rgba(245,200,66,0.8);
+        }
+        .sw-add-btn svg { transition: transform 0.2s; }
+        .sw-add-btn:hover svg { transform: scale(1.15); }
+
+        .sw-remove-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: 1px solid rgba(255,255,255,0.15);
+          background: rgba(255,255,255,0.05);
+          cursor: pointer;
+          color: rgba(255,255,255,0.4);
+          font-size: 14px;
+          line-height: 1;
+          transition: all 0.15s;
+          flex-shrink: 0;
+        }
+        .sw-remove-btn:hover {
+          border-color: rgba(239,68,68,0.5);
+          background: rgba(239,68,68,0.15);
+          color: #f87171;
+        }
+
+        .sw-results-grid {
+          display: grid;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        .sw-totals-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        @media (max-width: 768px) {
+          .sw-cols-3 {
+            grid-template-columns: 1fr;
+          }
+          .sw-results-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .sw-totals-grid {
+            grid-template-columns: 1fr;
+          }
+          .sw-title-text {
+            font-size: 18px !important;
+          }
+          .sw-subtitle {
+            display: none;
+          }
+          .sw-siege-pill span:last-child {
+            display: none;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .sw-results-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
+      <main className="sw-root text-slate-200" style={isMobile
+        ? { minHeight: "100dvh", overflowY: "auto" }
+        : { height: "100dvh", overflow: "hidden" }
+      }>
+        <div ref={frameRef} className="mx-auto max-w-5xl" style={isMobile
+          ? { padding: "16px 16px 32px" }
+          : { height: "100%", padding: "16px 24px" }
+        }>
+          <div ref={contentRef} className="w-full">
+
+            {/* ── Header ── */}
+            <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h1 className="sw-title sw-title-text" style={{ fontSize: 28, margin: 0 }}>Comparador de Artefatos</h1>
+                <p className="sw-subtitle" style={{ margin: "3px 0 0", fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, letterSpacing: "0.1em" }}>
+                  SUMMONERS WAR · DAMAGE CALCULATOR
+                </p>
+              </div>
+
+              {/* Siege toggle */}
+              <div
+                className="sw-siege-pill"
                 onClick={() => setIsSiege((v) => !v)}
-                className={`relative h-7 w-12 rounded-full border transition-colors ${
-                  isSiege ? "border-emerald-700 bg-emerald-900/40" : "border-slate-700 bg-slate-900"
-                }`}
+                style={{
+                  border: isSiege ? "1px solid rgba(245,200,66,0.35)" : "1px solid rgba(255,255,255,0.1)",
+                  background: isSiege ? "rgba(245,200,66,0.1)" : "rgb(18,22,34)",
+                  color: isSiege ? "#f5c842" : "rgba(255,255,255,0.45)",
+                  userSelect: "none",
+                }}
               >
-                <span
-                  className={`absolute top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-slate-200 transition-all ${
-                    isSiege ? "left-6" : "left-1"
-                  }`}
-                />
-              </button>
+                <span onClick={(e) => e.stopPropagation()}>
+                  <Toggle checked={isSiege} onToggle={() => setIsSiege((v) => !v)} accent="gold" />
+                </span>
+                Siege War
+              </div>
+            </header>
+
+            {/* ── Monster Picker ── */}
+            <div className="sw-card" style={{ padding: "14px 16px", marginBottom: 14 }}>
+              <MonsterPicker value={monsterPick} onChange={setMonsterPick} />
             </div>
-          </header>
 
-          {/* Monster picker */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
-            <MonsterPicker value={monsterPick} onChange={setMonsterPick} />
-          </div>
+            {monster && (
+              <>
+                {/* ── Always 3-column grid: [left panel] [A+C] [B+D] ── */}
+                <div className="sw-main-grid sw-cols-3">
 
-          {monster && (
-            <>
-              {/* Leader */}
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
-                <h2 className="mb-3 text-base font-semibold text-slate-100">Leader</h2>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {/* Attr */}
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-400">Atributo</span>
-                    <select
-                      className={`rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 outline-none ${
-                        leader.attr === "None" ? "text-slate-500" : "text-slate-100"
-                      }`}
-                      value={leader.attr}
-                      onChange={(e) => {
-                        const v = e.target.value as LeaderAttrUI;
-                        setLeader({ attr: v, amount: 0 });
-                      }}
-                    >
-                      <option value="None">{PLACEHOLDER_SELECT}</option>
-                      <option value="HP">HP</option>
-                      <option value="ATK">ATK</option>
-                      <option value="DEF">DEF</option>
-                      <option value="SPD">SPD</option>
-                    </select>
-                  </label>
-
-                  {/* Value */}
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-400">Valor</span>
-                    <div
-                      className={`flex items-center gap-2 rounded-lg border border-slate-800 px-3 py-2 ${
-                        leader.attr === "None" ? "bg-slate-950/40 opacity-60" : "bg-slate-900"
-                      }`}
-                    >
-                      <select
-                        className={`w-full rounded-md bg-slate-900 outline-none disabled:text-slate-500 ${
-                          leader.attr === "None" || leader.amount === 0 ? "text-slate-500" : "text-slate-100"
-                        }`}
-                        value={leader.amount}
-                        disabled={leader.attr === "None"}
-                        onChange={(e) => setLeader((s) => ({ ...s, amount: Number(e.target.value) || 0 }))}
-                      >
-                        <option value={0}>{PLACEHOLDER_SELECT}</option>
-                        {leader.attr === "None"
-                          ? null
-                          : LEADER_VALUES[leader.attr].map((v) => (
-                              <option key={v} value={v}>
-                                {v}%
-                              </option>
+                  {/* Col 1: Leader + Rune Bonus + Buffs */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Leader */}
+                    <div className="sw-card" style={{ padding: "12px 14px" }}>
+                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Leader Skill</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, fontWeight: 500 }}>Atributo</div>
+                          <select className="sw-select" style={{ color: leader.attr === "None" ? "rgba(255,255,255,0.25)" : "#e8dfc0" }} value={leader.attr}
+                            onChange={(e) => setLeader({ attr: e.target.value as LeaderAttrUI, amount: 0 })}>
+                            <option value="None">{PLACEHOLDER_SELECT}</option>
+                            <option value="HP">HP</option>
+                            <option value="ATK">ATK</option>
+                            <option value="DEF">DEF</option>
+                            <option value="SPD">SPD</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, fontWeight: 500 }}>Valor</div>
+                          <select className="sw-select" style={{ color: leader.amount === 0 ? "rgba(255,255,255,0.25)" : "#e8dfc0" }} value={leader.amount}
+                            disabled={leader.attr === "None"} onChange={(e) => setLeader((s) => ({ ...s, amount: Number(e.target.value) || 0 }))}>
+                            <option value={0}>{PLACEHOLDER_SELECT}</option>
+                            {leader.attr !== "None" && LEADER_VALUES[leader.attr].map((v) => (
+                              <option key={v} value={v}>{v}%</option>
                             ))}
-                      </select>
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                  </label>
+
+                    {/* Rune Bonus */}
+                    <div className="sw-card" style={{ padding: "12px 14px", flex: 1 }}>
+                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Bônus de Runas</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <NumberInput label="HP" v={bonus.hp} set={(v) => setBonus((s) => ({ ...s, hp: v }))} />
+                        <NumberInput label="ATK" v={bonus.atk} set={(v) => setBonus((s) => ({ ...s, atk: v }))} />
+                        <NumberInput label="DEF" v={bonus.def} set={(v) => setBonus((s) => ({ ...s, def: v }))} />
+                        <NumberInput label="SPD" v={bonus.spd} set={(v) => setBonus((s) => ({ ...s, spd: v }))} />
+                      </div>
+                    </div>
+
+                    {/* Buffs */}
+                    <div className="sw-card" style={{ padding: "12px 14px" }}>
+                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Buffs Ativos</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <BuffToggle label="ATK +50%" checked={buffs.atk} onToggle={() => setBuffs((s) => ({ ...s, atk: !s.atk }))} />
+                        <BuffToggle label="DEF +70%" checked={buffs.def} onToggle={() => setBuffs((s) => ({ ...s, def: !s.def }))} />
+                        <BuffToggle label="SPD +30%" checked={buffs.spd} onToggle={() => setBuffs((s) => ({ ...s, spd: !s.spd }))} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Col 2: Conjunto A + (C or + button) */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <ConjuntoCard letter="A" pct={pctA} setPct={setPctA} flats={artifactAFlats} setFlats={setArtifactAFlats} />
+                    {showC ? (
+                      <ConjuntoCard letter="C" pct={pctC} setPct={setPctC} flats={artifactCFlats} setFlats={setArtifactCFlats}
+                        onRemove={() => { setShowC(false); setPctC({ hp: "", atk: "", def: "", spd: "" }); setArtifactCFlats(["", ""]); }} />
+                    ) : (
+                      <button type="button" className="sw-add-btn" onClick={() => setShowC(true)}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        CONJUNTO C
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Col 3: Conjunto B + (D or + button) */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <ConjuntoCard letter="B" pct={pctB} setPct={setPctB} flats={artifactBFlats} setFlats={setArtifactBFlats} />
+                    {showD ? (
+                      <ConjuntoCard letter="D" pct={pctD} setPct={setPctD} flats={artifactDFlats} setFlats={setArtifactDFlats}
+                        onRemove={() => { setShowD(false); setPctD({ hp: "", atk: "", def: "", spd: "" }); setArtifactDFlats(["", ""]); }} />
+                    ) : (
+                      <button type="button" className="sw-add-btn" onClick={() => setShowD(true)}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        CONJUNTO D
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Inputs */}
-              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <Card title="Bônus de runas (Sem artefato)">
-                  <div className="grid grid-cols-2 gap-3">
-                    <NumberInput label="HP bônus" v={bonus.hp} set={(v) => setBonus((s) => ({ ...s, hp: v }))} />
-                    <NumberInput label="ATK bônus" v={bonus.atk} set={(v) => setBonus((s) => ({ ...s, atk: v }))} />
-                    <NumberInput label="DEF bônus" v={bonus.def} set={(v) => setBonus((s) => ({ ...s, def: v }))} />
-                    <NumberInput label="SPD bônus" v={bonus.spd} set={(v) => setBonus((s) => ({ ...s, spd: v }))} />
-                  </div>
-                </Card>
+                {/* ── Results ── */}
+                <div className="sw-card" style={{ padding: "16px 18px" }}>
+                  {result ? (
+                    <>
+                      {(() => {
+                        const activeKeys = ["A", "B", ...(showC ? ["C"] : []), ...(showD ? ["D"] : [])];
+                        const totals = { A: result.totalA, B: result.totalB, C: result.totalC, D: result.totalD };
+                        const dmg = { A: result.A, B: result.B, C: result.C, D: result.D };
+                        const colCount = activeKeys.length;
+                        const resultColStyle = `repeat(${colCount}, 1fr)`;
+                        return (
+                          <>
+                            <div className="sw-results-grid" style={{ gridTemplateColumns: resultColStyle }}>
+                              {activeKeys.map((k) => {
+                                const isWinner = result.winners.includes(k);
+                                const isLoser = !isWinner && result.winners.length === 1;
+                                return (
+                                  <ResultBar key={k} title={`Conjunto ${k}`} total={(dmg as any)[k].total}
+                                    tone={isWinner ? "good" : isLoser ? "bad" : "neutral"} />
+                                );
+                              })}
+                            </div>
 
-                <Card title="Artefato A (% dano por atributo)">
-                  <ArtifactInputs s={pctA} set={setPctA} />
-                  <div className="mt-4">
-                    <ArtifactFlatPickers picks={artifactAFlats} setPicks={setArtifactAFlats} />
-                  </div>
-                </Card>
+                            <div className="sw-totals-grid">
+                              <TotalsPanel rows={[
+                                { label: "HP", value: activeKeys.map((k) => fmt((totals as any)[k].hp)).join(" / ") },
+                                { label: "ATK", value: activeKeys.map((k) => fmt((totals as any)[k].atk)).join(" / ") },
+                              ]} />
+                              <TotalsPanel rows={[
+                                { label: "DEF", value: activeKeys.map((k) => fmt((totals as any)[k].def)).join(" / ") },
+                                { label: "SPD", value: activeKeys.map((k) => fmt((totals as any)[k].spd)).join(" / ") },
+                              ]} />
+                            </div>
 
-                <Card title="Artefato B (% dano por atributo)">
-                  <ArtifactInputs s={pctB} set={setPctB} />
-                  <div className="mt-4">
-                    <ArtifactFlatPickers picks={artifactBFlats} setPicks={setArtifactBFlats} />
-                  </div>
-                </Card>
-              </div>
-
-              {/* Results */}
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
-                {result ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <ResultBar
-                        title="Artefato A"
-                        total={result.A.total}
-                        tone={result.winner === "A" ? "good" : result.winner === "B" ? "bad" : "neutral"}
-                      />
-                      <ResultBar
-                        title="Artefato B"
-                        total={result.B.total}
-                        tone={result.winner === "B" ? "good" : result.winner === "A" ? "bad" : "neutral"}
-                      />
+                            <div style={{ textAlign: "center" }}>
+                              {result.winners.length > 1 ? (
+                                <span className="sw-winner-badge" style={{ color: "rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                                  ⚖ Empate
+                                </span>
+                              ) : (
+                                <span className="sw-winner-badge">✦ {result.winnerLabel}</span>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <div style={{ textAlign: "center", padding: "12px 0", fontSize: 13, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em" }}>
+                      Selecione um monstro para ver os resultados
                     </div>
-
-                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <TotalsPanel
-                        rows={[
-                          { label: "HP total (A / B)", value: `${fmt(result.totalA.hp)} / ${fmt(result.totalB.hp)}` },
-                          { label: "ATK total (A / B)", value: `${fmt(result.totalA.atk)} / ${fmt(result.totalB.atk)}` },
-                        ]}
-                      />
-                      <TotalsPanel
-                        rows={[
-                          { label: "DEF total (A / B)", value: `${fmt(result.totalA.def)} / ${fmt(result.totalB.def)}` },
-                          { label: "SPD total (A / B)", value: `${fmt(result.totalA.spd)} / ${fmt(result.totalB.spd)}` },
-                        ]}
-                      />
-                    </div>
-
-                    <div className="mt-3 text-center text-sm text-slate-300">
-                      Vencedor:{" "}
-                      <span className="font-semibold text-slate-100">
-                        {result.winner === "TIE" ? "Empate" : `Artefato ${result.winner}`}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-sm text-slate-400">Selecione um monstro para ver os resultados.</div>
-                )}
-              </div>
-            </>
-          )}
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
 
@@ -452,44 +776,161 @@ export default function Page() {
    UI Components
 ======================= */
 
-function Card(props: { title: string; children: React.ReactNode }) {
+const CONJUNTO_COLORS: Record<string, { bg: string; border: string; color: string; labelColor: string }> = {
+  A: { bg: "rgb(22,20,14)", border: "rgba(245,200,66,0.18)", color: "#f5c842", labelColor: "rgba(245,200,66,0.85)" },
+  B: { bg: "rgb(14,18,30)", border: "rgba(99,179,237,0.22)", color: "#63b3ed", labelColor: "rgba(99,179,237,0.9)" },
+  C: { bg: "rgb(14,22,22)", border: "rgba(52,211,153,0.18)", color: "#34d399", labelColor: "rgba(52,211,153,0.85)" },
+  D: { bg: "rgb(22,14,28)", border: "rgba(196,130,241,0.18)", color: "#c084fc", labelColor: "rgba(196,130,241,0.85)" },
+};
+
+function ConjuntoCard(props: {
+  letter: string;
+  accent?: boolean;
+  isActive?: boolean;
+  pct: PercentStatsStr;
+  setPct: React.Dispatch<React.SetStateAction<PercentStatsStr>>;
+  flats: [ArtifactFlatOption, ArtifactFlatOption];
+  setFlats: React.Dispatch<React.SetStateAction<[ArtifactFlatOption, ArtifactFlatOption]>>;
+  onRemove?: () => void;
+}) {
+  const c = CONJUNTO_COLORS[props.letter] ?? CONJUNTO_COLORS["B"];
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
-      <h2 className="mb-3 text-base font-semibold text-slate-100">{props.title}</h2>
-      {props.children}
+    <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px",
+      boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: "50%",
+          background: `${c.color}22`, border: `1px solid ${c.color}55`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 700, color: c.color, fontFamily: "Cinzel, serif", flexShrink: 0,
+        }}>{props.letter}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "Cinzel, serif", fontSize: 13, color: c.labelColor, letterSpacing: "0.06em" }}>
+            Conjunto {props.letter}
+          </div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>% DANO POR ATRIBUTO</div>
+        </div>
+        {props.onRemove && (
+          <button type="button" className="sw-remove-btn" onClick={props.onRemove} title="Remover">×</button>
+        )}
+      </div>
+      <ArtifactInputs s={props.pct} set={props.setPct} />
+      <div className="sw-divider" style={{ margin: "14px 0" }} />
+      <ArtifactFlatPickers picks={props.flats} setPicks={props.setFlats} />
     </div>
   );
 }
 
-function ResultBar(props: { title: string; total: number; tone: "good" | "bad" | "neutral" }) {
-  const cls =
-    props.tone === "good"
-      ? "border-emerald-900/60 bg-emerald-950/40"
-      : props.tone === "bad"
-      ? "border-rose-900/60 bg-rose-950/40"
-      : "border-slate-800 bg-slate-950/40";
+function Toggle(props: { checked: boolean; onToggle: () => void; accent?: "green" | "gold" }) {
+  const accent = props.accent ?? "green";
+  const trackOn = accent === "gold" ? "rgba(120,80,10,0.6)" : "rgba(6,78,59,0.5)";
+  const borderOn = accent === "gold" ? "#b8860b" : "#059669";
+  const thumbOn = accent === "gold" ? "#f5c842" : "#34d399";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
+      onClick={props.onToggle}
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        width: 36,
+        height: 20,
+        borderRadius: 9999,
+        border: props.checked ? `1px solid ${borderOn}` : "1px solid rgba(255,255,255,0.15)",
+        background: props.checked ? trackOn : "rgba(0,0,0,0.4)",
+        transition: "background 0.2s, border-color 0.2s",
+        cursor: "pointer",
+        flexShrink: 0,
+        padding: 0,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: props.checked ? 17 : 3,
+          width: 13,
+          height: 13,
+          borderRadius: "50%",
+          background: props.checked ? thumbOn : "rgba(255,255,255,0.3)",
+          transition: "left 0.2s, background 0.2s",
+          display: "block",
+        }}
+      />
+    </button>
+  );
+}
 
-  const numCls =
-    props.tone === "good" ? "text-emerald-400" : props.tone === "bad" ? "text-rose-400" : "text-slate-100";
+function BuffToggle(props: { label: string; sublabel?: string; checked: boolean; onToggle: () => void }) {
+  return (
+    <div
+      onClick={props.onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        padding: "5px 10px",
+        borderRadius: 8,
+        border: props.checked ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.07)",
+        background: props.checked ? "rgba(6,78,59,0.25)" : "rgba(255,255,255,0.03)",
+        cursor: "pointer",
+        userSelect: "none",
+        transition: "background 0.15s, border-color 0.15s",
+      }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 600, color: props.checked ? "#a7f3d0" : "rgba(255,255,255,0.5)", fontFamily: "Rajdhani, sans-serif", letterSpacing: "0.04em" }}>
+        {props.label}
+      </span>
+      <span onClick={(e) => e.stopPropagation()}>
+        <Toggle checked={props.checked} onToggle={props.onToggle} />
+      </span>
+    </div>
+  );
+}
+
+
+function ResultBar(props: { title: string; total: number; tone: "good" | "bad" | "neutral" }) {
+  const containerStyle: React.CSSProperties =
+    props.tone === "good"
+      ? { background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.28)", borderRadius: 10, padding: "14px 16px", boxShadow: "0 0 20px rgba(16,185,129,0.07)" }
+      : props.tone === "bad"
+      ? { background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "14px 16px" }
+      : { background: "rgb(18,22,34)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "14px 16px" };
+
+  const numColor = props.tone === "good" ? "#34d399" : props.tone === "bad" ? "#f87171" : "#e8dfc0";
 
   return (
-    <div className={`rounded-lg border p-4 ${cls}`}>
-      <div className="text-center text-lg font-semibold text-slate-100">{props.title}</div>
-      <div className={`mt-2 text-center text-3xl font-bold ${numCls}`}>{fmt(props.total)}</div>
+    <div style={containerStyle}>
+      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.4)", fontFamily: "Rajdhani, sans-serif", marginBottom: 6 }}>
+        {props.title.toUpperCase()}
+      </div>
+      <div style={{ textAlign: "center", fontSize: 30, fontWeight: 700, color: numColor, fontFamily: "Rajdhani, sans-serif", letterSpacing: "-0.02em" }}>
+        {fmt(props.total)}
+      </div>
     </div>
   );
 }
 
 function TotalsPanel(props: { rows: { label: string; value: string }[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
+    <div style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, overflow: "hidden" }}>
       {props.rows.map((r, idx) => (
         <div
           key={r.label}
-          className={`flex items-center justify-between gap-3 px-4 py-3 ${idx === 0 ? "" : "border-t border-slate-800"}`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "7px 12px",
+            borderTop: idx === 0 ? "none" : "1px solid rgba(255,255,255,0.05)",
+          }}
         >
-          <div className="text-sm text-slate-300">{r.label}</div>
-          <div className="text-sm font-semibold text-slate-100">{r.value}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{r.label}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#e8dfc0", fontFamily: "Rajdhani, sans-serif" }}>{r.value}</div>
         </div>
       ))}
     </div>
@@ -498,16 +939,14 @@ function TotalsPanel(props: { rows: { label: string; value: string }[] }) {
 
 function NumberInput(props: { label: string; v: number; set: (n: number) => void }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm text-slate-400">{props.label}</span>
-      <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
-        <input
-          className="w-full bg-transparent text-slate-100 outline-none placeholder:text-slate-600"
-          inputMode="decimal"
-          value={String(props.v).replace(".", ",")}
-          onChange={(e) => props.set(parseDecimal(e.target.value))}
-        />
-      </div>
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <input
+        className="sw-input"
+        inputMode="decimal"
+        value={String(props.v).replace(".", ",")}
+        onChange={(e) => props.set(parseDecimal(e.target.value))}
+      />
     </label>
   );
 }
@@ -516,11 +955,12 @@ function NumberInput(props: { label: string; v: number; set: (n: number) => void
 
 function PercentInputHP(props: { label: string; v: string; set: (s: string) => void }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm text-slate-400">{props.label}</span>
-      <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
-          className="w-full bg-transparent text-slate-100 outline-none placeholder:text-slate-600"
+          className="sw-input"
+          style={{ paddingRight: 24 }}
           inputMode="decimal"
           placeholder="0,0"
           value={props.v}
@@ -531,7 +971,7 @@ function PercentInputHP(props: { label: string; v: string; set: (s: string) => v
             props.set(s);
           }}
         />
-        <span className="text-sm text-slate-400">%</span>
+        <span style={{ position: "absolute", right: 10, fontSize: 11, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
       </div>
     </label>
   );
@@ -539,17 +979,18 @@ function PercentInputHP(props: { label: string; v: string; set: (s: string) => v
 
 function PercentInputInt(props: { label: string; v: string; set: (s: string) => void }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm text-slate-400">{props.label}</span>
-      <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
-          className="w-full bg-transparent text-slate-100 outline-none placeholder:text-slate-600"
+          className="sw-input"
+          style={{ paddingRight: 24 }}
           inputMode="numeric"
           placeholder="0"
           value={props.v}
           onChange={(e) => props.set(e.target.value.replace(/[^\d]/g, ""))}
         />
-        <span className="text-sm text-slate-400">%</span>
+        <span style={{ position: "absolute", right: 10, fontSize: 11, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
       </div>
     </label>
   );
@@ -573,7 +1014,7 @@ function ArtifactFlatPickers(props: {
   setPicks: React.Dispatch<React.SetStateAction<[ArtifactFlatOption, ArtifactFlatOption]>>;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2">
+    <div className="flex flex-col gap-2">
       <ArtifactFlatRow
         label="Artefato 1"
         value={props.picks[0]}
@@ -590,9 +1031,9 @@ function ArtifactFlatPickers(props: {
 
 function ArtifactFlatRow(props: { label: string; value: ArtifactFlatOption; onChange: (v: ArtifactFlatOption) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <div className="flex items-center rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-200">
-        {props.label}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8, alignItems: "center" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>
+        {props.label.toUpperCase()}
       </div>
       <ArtifactDropdown value={props.value} onChange={props.onChange} />
     </div>
@@ -636,15 +1077,27 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
           if (!open) openWithDir();
           else setOpen(false);
         }}
-        className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-left outline-none hover:bg-slate-950/70"
+        style={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(0,0,0,0.35)",
+          border: open ? "1px solid rgba(245,200,66,0.4)" : "1px solid rgba(255,255,255,0.09)",
+          borderRadius: 8,
+          padding: "7px 10px",
+          cursor: "pointer",
+          outline: "none",
+          transition: "border-color 0.15s",
+        }}
       >
-        <span className="text-sm">
+        <span style={{ fontSize: 13, fontFamily: "Rajdhani, sans-serif", fontWeight: 500 }}>
           {!meta ? (
-            <span className="text-slate-500">{PLACEHOLDER_SELECT}</span>
+            <span style={{ color: "rgba(255,255,255,0.2)" }}>{PLACEHOLDER_SELECT}</span>
           ) : (
             <>
-              <span className="text-slate-200">{meta.main} </span>
-              <span className="text-emerald-400">{meta.bonus}</span>
+              <span style={{ color: "#e8dfc0" }}>{meta.main} </span>
+              <span style={{ color: "#f5c842", fontSize: 11 }}>{meta.bonus}</span>
             </>
           )}
         </span>
@@ -653,9 +1106,17 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
 
       {open && (
         <div
-          className={`absolute z-50 w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-lg ${
-            dir === "up" ? "bottom-full mb-2" : "top-full mt-2"
-          }`}
+          style={{
+            position: "absolute",
+            zIndex: 50,
+            width: "100%",
+            overflow: "hidden",
+            borderRadius: 8,
+            border: "1px solid rgba(245,200,66,0.2)",
+            background: "#0d1117",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+          }}
+          className={dir === "up" ? "bottom-full mb-2" : "top-full mt-2"}
         >
           {ARTIFACT_OPTIONS.map((opt) => {
             const m = flatLabel(opt);
@@ -667,14 +1128,30 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
                   props.onChange(opt);
                   setOpen(false);
                 }}
-                className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-slate-800"
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                  fontSize: 13,
+                  fontFamily: "Rajdhani, sans-serif",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  transition: "background 0.1s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,200,66,0.07)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 {!m ? (
-                  <span className="text-slate-500">{PLACEHOLDER_SELECT}</span>
+                  <span style={{ color: "rgba(255,255,255,0.2)" }}>{PLACEHOLDER_SELECT}</span>
                 ) : (
                   <>
-                    <span className="text-slate-200">{m.main} </span>
-                    <span className="text-emerald-400">{m.bonus}</span>
+                    <span style={{ color: "#e8dfc0" }}>{m.main} </span>
+                    <span style={{ color: "#f5c842", fontSize: 11 }}>{m.bonus}</span>
                   </>
                 )}
               </button>
@@ -688,7 +1165,7 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
 
 function ChevronDown() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" className="text-slate-300">
+    <svg width="16" height="16" viewBox="0 0 24 24" style={{ color: "rgba(245,200,66,0.5)", flexShrink: 0 }}>
       <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
     </svg>
   );
@@ -752,71 +1229,102 @@ function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: Mon
   }, [all, q, open, props.value]);
 
   return (
-    <div ref={rootRef} className="relative">
-      <label className="text-sm text-slate-400">Monster</label>
+    <div ref={rootRef} style={{ position: "relative" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.15em", color: "rgba(245,200,66,0.6)", fontFamily: "Rajdhani, sans-serif", marginBottom: 8 }}>
+        MONSTRO
+      </div>
 
-      <div className="mt-1 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-        <input
-          className="w-full bg-transparent text-slate-100 outline-none placeholder:text-slate-600"
-          placeholder={loading ? "Carregando lista..." : "Digite para buscar..."}
-          value={open ? q : props.value ? displayMonsterName(props.value) : ""}
-          onFocus={() => {
-            setOpen(true);
-            setQ(props.value ? displayMonsterName(props.value) : "");
-            requestAnimationFrame(() => updateDir());
-          }}
-          onChange={(e) => {
-            setOpen(true);
-            setQ(e.target.value);
-            props.onChange(null);
-            requestAnimationFrame(() => updateDir());
-          }}
-        />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 8, padding: "7px 12px" }}>
+          <input
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#e8dfc0", fontFamily: "Rajdhani, sans-serif", fontSize: 14, fontWeight: 500 }}
+            placeholder={loading ? "Carregando lista..." : "Digite para buscar..."}
+            value={open ? q : props.value ? displayMonsterName(props.value) : ""}
+            onFocus={() => {
+              setOpen(true);
+              setQ(props.value ? displayMonsterName(props.value) : "");
+              requestAnimationFrame(() => updateDir());
+            }}
+            onChange={(e) => {
+              setOpen(true);
+              setQ(e.target.value);
+              props.onChange(null);
+              requestAnimationFrame(() => updateDir());
+            }}
+          />
+        </div>
 
         <button
           type="button"
-          className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
-          onClick={() => {
-            props.onChange(null);
-            setQ("");
-            setOpen(false);
+          onClick={() => { props.onChange(null); setQ(""); setOpen(false); }}
+          style={{
+            background: "rgba(0,0,0,0.3)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            borderRadius: 8,
+            padding: "7px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.4)",
+            cursor: "pointer",
+            fontFamily: "Rajdhani, sans-serif",
+            letterSpacing: "0.06em",
+            transition: "border-color 0.15s, color 0.15s",
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#e8dfc0"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}
         >
-          Limpar
+          LIMPAR
         </button>
       </div>
 
       {open && (
         <div
-          className={`absolute z-50 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-lg ${
-            dir === "up" ? "bottom-full mb-2" : "top-full mt-2"
-          }`}
+          style={{
+            position: "absolute",
+            zIndex: 50,
+            width: "100%",
+            overflow: "hidden",
+            borderRadius: 10,
+            border: "1px solid rgba(245,200,66,0.15)",
+            background: "#0d1117",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+          }}
+          className={dir === "up" ? "bottom-full mb-2" : "top-full mt-2"}
         >
-          <div className="border-b border-slate-800 px-3 py-2 text-xs text-slate-400">
-            {loading
-              ? "Carregando..."
-              : q.trim()
-              ? `${filtered.length} resultados`
-              : `Mostrando ${filtered.length} (digite para filtrar)`}
+          <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(245,200,66,0.5)", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "Rajdhani, sans-serif" }}>
+            {loading ? "CARREGANDO..." : q.trim() ? `${filtered.length} RESULTADOS` : `${filtered.length} MONSTROS`}
           </div>
 
-          <div className="max-h-72 overflow-auto">
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
             {filtered.map((m) => (
               <button
                 key={m.id}
                 type="button"
-                className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
-                onClick={() => {
-                  props.onChange(m);
-                  setOpen(false);
+                onClick={() => { props.onChange(m); setOpen(false); }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                  fontSize: 13,
+                  fontFamily: "Rajdhani, sans-serif",
+                  fontWeight: 500,
+                  color: "#e8dfc0",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid rgba(255,255,255,0.03)",
+                  cursor: "pointer",
+                  transition: "background 0.1s",
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,200,66,0.07)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
-                {m.name} {m.element ? `(${m.element})` : ""}
+                {m.name}{m.element ? <span style={{ color: "rgba(245,200,66,0.5)", marginLeft: 4 }}>({m.element})</span> : ""}
               </button>
             ))}
 
             {!loading && filtered.length === 0 && (
-              <div className="px-3 py-3 text-sm text-slate-400">Nenhum resultado.</div>
+              <div style={{ padding: "12px", fontSize: 13, color: "rgba(255,255,255,0.25)", fontFamily: "Rajdhani, sans-serif" }}>Nenhum resultado.</div>
             )}
           </div>
         </div>
