@@ -194,78 +194,69 @@ export default function Page() {
   const [artifactCFlats, setArtifactCFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
   const [artifactDFlats, setArtifactDFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 769);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
   const frameRef = useRef<HTMLDivElement | null>(null);
+
+  const handleClear = () => {
+    setMonsterPick(null);
+    setMonster(null);
+    setIsSiege(false);
+    setLeader({ attr: "None", amount: 0 });
+    setBonus({ hp: 0, atk: 0, def: 0, spd: 0 });
+    setBuffs({ atk: false, def: false, spd: false });
+    setPctA({ hp: "", atk: "", def: "", spd: "" });
+    setPctB({ hp: "", atk: "", def: "", spd: "" });
+    setArtifactAFlats(["", ""]);
+    setArtifactBFlats(["", ""]);
+    setShowC(false);
+    setShowD(false);
+    setPctC({ hp: "", atk: "", def: "", spd: "" });
+    setPctD({ hp: "", atk: "", def: "", spd: "" });
+    setArtifactCFlats(["", ""]);
+    setArtifactDFlats(["", ""]);
+  };
+  // Scale the whole page to fit viewport width
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const lastScaleRef = useRef<number>(1);
+  const DESIGN_W = 1024;
 
   useEffect(() => {
-    const frame = frameRef.current;
-    const content = contentRef.current;
-    if (!frame || !content) return;
+    const el = contentRef.current;
+    if (!el) return;
 
-    let raf = 0;
+    let rafId = 0;
+    const apply = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        // Reset to measure natural size
+        el.style.transform = "";
+        el.style.width = `${DESIGN_W}px`;
+        el.style.marginLeft = "";
 
-    const applyScale = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (window.innerWidth < 769) {
-          content.style.transform = "none";
-          lastScaleRef.current = 1;
-          return;
-        }
+        const naturalH = el.scrollHeight;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scale = Math.min(vw / DESIGN_W, vh / naturalH, 1);
 
-        const frameW = frame.clientWidth || 1;
-        const frameH = frame.clientHeight || 1;
-
-        const contentW = content.scrollWidth || 1;
-        const contentH = content.scrollHeight || 1;
-
-        const safety = 0.98;
-        const sW = (frameW / contentW) * safety;
-        const sH = (frameH / contentH) * safety;
-
-        const next = clamp(Math.min(1, sW, sH), 0.78, 1);
-        const rounded = Number(next.toFixed(3));
-
-        if (Math.abs(rounded - lastScaleRef.current) > 0.001) {
-          lastScaleRef.current = rounded;
-          content.style.transformOrigin = "top center";
-          content.style.transform = `scale(${rounded})`;
+        el.style.transformOrigin = "top left";
+        el.style.transform = `scale(${scale.toFixed(4)})`;
+        // Center horizontally
+        el.style.marginLeft = `${Math.max(0, (vw - DESIGN_W * scale) / 2)}px`;
+        // Collapse parent height so no scroll — no overflow:hidden so dropdown escapes
+        if (el.parentElement) {
+          el.parentElement.style.height = `${Math.ceil(naturalH * scale)}px`;
         }
       });
     };
 
-    applyScale();
-
-    const onResize = () => applyScale();
-    window.addEventListener("resize", onResize);
-    window.visualViewport?.addEventListener("resize", onResize);
-
-    let roFrame: ResizeObserver | null = null;
-    let roContent: ResizeObserver | null = null;
-
-    if (typeof ResizeObserver !== "undefined") {
-      roFrame = new ResizeObserver(() => applyScale());
-      roContent = new ResizeObserver(() => applyScale());
-      roFrame.observe(frame);
-      roContent.observe(content);
-    }
-
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    window.addEventListener("resize", apply);
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
-      window.visualViewport?.removeEventListener("resize", onResize);
-      roFrame?.disconnect();
-      roContent?.disconnect();
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+      window.removeEventListener("resize", apply);
     };
-  }, [monster]);
+  }, [monster, showC, showD, monsterPick]);
 
   // ===== Fetch monster detail =====
   useEffect(() => {
@@ -373,10 +364,10 @@ export default function Page() {
         .sw-section-label {
           font-family: 'Rajdhani', sans-serif;
           font-size: 11px;
-          font-weight: 600;
+          font-weight: 700;
           letter-spacing: 0.15em;
           text-transform: uppercase;
-          color: rgba(245,200,66,0.6);
+          color: rgba(245,200,66,0.85);
         }
 
         .sw-input {
@@ -384,11 +375,11 @@ export default function Page() {
           border: 1px solid rgba(255,255,255,0.09);
           border-radius: 8px;
           color: #e8dfc0;
-          padding: 7px 12px;
+          padding: 9px 13px;
           width: 100%;
           outline: none;
           font-family: 'Rajdhani', sans-serif;
-          font-size: 14px;
+          font-size: 18px;
           font-weight: 500;
           transition: border-color 0.15s;
         }
@@ -400,11 +391,11 @@ export default function Page() {
           border: 1px solid rgba(255,255,255,0.09);
           border-radius: 8px;
           color: #e8dfc0;
-          padding: 7px 12px;
+          padding: 9px 13px;
           width: 100%;
           outline: none;
           font-family: 'Rajdhani', sans-serif;
-          font-size: 14px;
+          font-size: 18px;
           font-weight: 500;
           transition: border-color 0.15s;
           cursor: pointer;
@@ -445,7 +436,7 @@ export default function Page() {
           border-radius: 9999px;
           background: rgba(245,200,66,0.1);
           border: 1px solid rgba(245,200,66,0.3);
-          font-size: 13px;
+          font-size: 18px;
           font-weight: 600;
           color: #f5c842;
           letter-spacing: 0.05em;
@@ -453,7 +444,7 @@ export default function Page() {
 
         .sw-artifact-label {
           font-family: 'Cinzel', serif;
-          font-size: 13px;
+          font-size: 18px;
           color: rgba(245,200,66,0.8);
           letter-spacing: 0.06em;
         }
@@ -464,7 +455,7 @@ export default function Page() {
           justify-content: space-between;
           padding: 6px 0;
           border-bottom: 1px solid rgba(255,255,255,0.05);
-          font-size: 13px;
+          font-size: 18px;
         }
         .sw-stat-row:last-child { border-bottom: none; }
 
@@ -476,7 +467,7 @@ export default function Page() {
           border-radius: 9999px;
           cursor: pointer;
           transition: all 0.2s;
-          font-size: 13px;
+          font-size: 18px;
           font-weight: 600;
           letter-spacing: 0.05em;
         }
@@ -504,7 +495,7 @@ export default function Page() {
           padding: 16px;
           color: rgba(245,200,66,0.4);
           font-family: 'Rajdhani', sans-serif;
-          font-size: 12px;
+          font-size: 17px;
           font-weight: 600;
           letter-spacing: 0.1em;
         }
@@ -527,7 +518,7 @@ export default function Page() {
           background: rgba(255,255,255,0.05);
           cursor: pointer;
           color: rgba(255,255,255,0.4);
-          font-size: 14px;
+          font-size: 18px;
           line-height: 1;
           transition: all 0.15s;
           flex-shrink: 0;
@@ -551,88 +542,66 @@ export default function Page() {
         }
 
         @media (max-width: 768px) {
-          .sw-cols-3 {
-            grid-template-columns: 1fr;
-          }
-          .sw-results-grid {
-            grid-template-columns: 1fr 1fr !important;
-          }
-          .sw-totals-grid {
-            grid-template-columns: 1fr;
-          }
-          .sw-title-text {
-            font-size: 18px !important;
-          }
-          .sw-subtitle {
-            display: none;
-          }
-          .sw-siege-pill span:last-child {
-            display: none;
-          }
+          .sw-cols-3 { grid-template-columns: 1fr; }
+          .sw-results-grid { grid-template-columns: 1fr 1fr !important; }
+          .sw-totals-grid { grid-template-columns: 1fr; }
+          .sw-title-text { font-size: 20px !important; }
+          .sw-subtitle { display: none; }
+          .sw-siege-pill span:last-child { display: none; }
         }
-
         @media (max-width: 480px) {
-          .sw-results-grid {
-            grid-template-columns: 1fr !important;
-          }
+          .sw-results-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
-      <main className="sw-root text-slate-200" style={isMobile
-        ? { minHeight: "100dvh", overflowY: "auto" }
-        : { height: "100dvh", overflow: "hidden" }
-      }>
-        <div ref={frameRef} className="mx-auto max-w-5xl" style={isMobile
-          ? { padding: "16px 16px 32px" }
-          : { height: "100%", padding: "16px 24px" }
-        }>
-          <div ref={contentRef} className="w-full">
+      <main className="sw-root text-slate-200" style={{ height: "100dvh" }}>
+        <div ref={frameRef} style={{ width: "100%" }}>
+          <div ref={contentRef} style={{ padding: "8px 20px 16px", width: `${DESIGN_W}px`, marginLeft: "auto", marginRight: "auto" }}>
 
             {/* ── Header ── */}
-            <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <div>
-                <h1 className="sw-title sw-title-text" style={{ fontSize: 28, margin: 0 }}>Comparador de Artefatos</h1>
-                <p className="sw-subtitle" style={{ margin: "3px 0 0", fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, letterSpacing: "0.1em" }}>
-                  SUMMONERS WAR · DAMAGE CALCULATOR
-                </p>
+                <h1 className="sw-title sw-title-text" style={{ fontSize: 33, margin: 0 }}>Comparador de Artefatos</h1>
               </div>
 
-              {/* Siege toggle */}
-              <div
-                className="sw-siege-pill"
-                onClick={() => setIsSiege((v) => !v)}
-                style={{
-                  border: isSiege ? "1px solid rgba(245,200,66,0.35)" : "1px solid rgba(255,255,255,0.1)",
-                  background: isSiege ? "rgba(245,200,66,0.1)" : "rgb(18,22,34)",
-                  color: isSiege ? "#f5c842" : "rgba(255,255,255,0.45)",
-                  userSelect: "none",
-                }}
-              >
-                <span onClick={(e) => e.stopPropagation()}>
-                  <Toggle checked={isSiege} onToggle={() => setIsSiege((v) => !v)} accent="gold" />
-                </span>
-                Siege War
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {/* Siege toggle */}
+                <div
+                  className="sw-siege-pill"
+                  onClick={() => setIsSiege((v) => !v)}
+                  style={{
+                    border: isSiege ? "1px solid rgba(245,200,66,0.35)" : "1px solid rgba(255,255,255,0.1)",
+                    background: isSiege ? "rgba(245,200,66,0.1)" : "rgb(18,22,34)",
+                    color: isSiege ? "#f5c842" : "rgba(255,255,255,0.45)",
+                    userSelect: "none",
+                  }}
+                >
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Toggle checked={isSiege} onToggle={() => setIsSiege((v) => !v)} accent="gold" />
+                  </span>
+                  Siege War
+                </div>
               </div>
             </header>
 
-            {/* ── Monster Picker ── */}
-            <div className="sw-card" style={{ padding: "14px 16px", marginBottom: 14 }}>
-              <MonsterPicker value={monsterPick} onChange={setMonsterPick} />
+            {/* ── Monster Picker ── overflow:visible so dropdown isn't clipped */}
+            <div style={{ background: "rgb(18,22,34)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, boxShadow: "0 4px 24px rgba(0,0,0,0.4)", padding: "14px 16px", marginBottom: 14, position: "relative", zIndex: 100, overflow: "visible" }}>
+              <MonsterPicker value={monsterPick} onChange={setMonsterPick} onClear={handleClear} />
             </div>
 
             {monster && (
               <>
-                {/* ── Always 3-column grid: [left panel] [A+C] [B+D] ── */}
-                <div className="sw-main-grid sw-cols-3">
+                {/* ── Main layout: left panel + conjuntos side by side ── */}
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "stretch" }}>
 
-                  {/* Col 1: Leader + Rune Bonus + Buffs */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Left panel: Leader + Rune Bonus + Buffs — fixed width */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, width: 210, flexShrink: 0 }}>
                     {/* Leader */}
-                    <div className="sw-card" style={{ padding: "12px 14px" }}>
-                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Leader Skill</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div className="sw-card" style={{ padding: "10px 12px" }}>
+                      <div className="sw-section-label" style={{ marginBottom: 8 }}>Leader Skill</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                         <div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, fontWeight: 500 }}>Atributo</div>
+                          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginBottom: 3, fontWeight: 500 }}>Atributo</div>
                           <select className="sw-select" style={{ color: leader.attr === "None" ? "rgba(255,255,255,0.25)" : "#e8dfc0" }} value={leader.attr}
                             onChange={(e) => setLeader({ attr: e.target.value as LeaderAttrUI, amount: 0 })}>
                             <option value="None">{PLACEHOLDER_SELECT}</option>
@@ -643,7 +612,7 @@ export default function Page() {
                           </select>
                         </div>
                         <div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, fontWeight: 500 }}>Valor</div>
+                          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginBottom: 3, fontWeight: 500 }}>Valor</div>
                           <select className="sw-select" style={{ color: leader.amount === 0 ? "rgba(255,255,255,0.25)" : "#e8dfc0" }} value={leader.amount}
                             disabled={leader.attr === "None"} onChange={(e) => setLeader((s) => ({ ...s, amount: Number(e.target.value) || 0 }))}>
                             <option value={0}>{PLACEHOLDER_SELECT}</option>
@@ -656,9 +625,9 @@ export default function Page() {
                     </div>
 
                     {/* Rune Bonus */}
-                    <div className="sw-card" style={{ padding: "12px 14px", flex: 1 }}>
-                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Bônus de Runas</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div className="sw-card" style={{ padding: "10px 12px", flex: 1 }}>
+                      <div className="sw-section-label" style={{ marginBottom: 8 }}>Bônus de Runas</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
                         <NumberInput label="HP" v={bonus.hp} set={(v) => setBonus((s) => ({ ...s, hp: v }))} />
                         <NumberInput label="ATK" v={bonus.atk} set={(v) => setBonus((s) => ({ ...s, atk: v }))} />
                         <NumberInput label="DEF" v={bonus.def} set={(v) => setBonus((s) => ({ ...s, def: v }))} />
@@ -667,8 +636,8 @@ export default function Page() {
                     </div>
 
                     {/* Buffs */}
-                    <div className="sw-card" style={{ padding: "12px 14px" }}>
-                      <div className="sw-section-label" style={{ marginBottom: 10 }}>Buffs Ativos</div>
+                    <div className="sw-card" style={{ padding: "10px 12px" }}>
+                      <div className="sw-section-label" style={{ marginBottom: 8 }}>Buffs Ativos</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                         <BuffToggle label="ATK +50%" checked={buffs.atk} onToggle={() => setBuffs((s) => ({ ...s, atk: !s.atk }))} />
                         <BuffToggle label="DEF +70%" checked={buffs.def} onToggle={() => setBuffs((s) => ({ ...s, def: !s.def }))} />
@@ -677,34 +646,37 @@ export default function Page() {
                     </div>
                   </div>
 
-                  {/* Col 2: Conjunto A + (C or + button) */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Conjuntos: A + B always, C and D optional — all side by side, equal width */}
+                  <div style={{ display: "flex", gap: 10, flex: 1, minWidth: 0 }}>
                     <ConjuntoCard letter="A" pct={pctA} setPct={setPctA} flats={artifactAFlats} setFlats={setArtifactAFlats} />
-                    {showC ? (
+                    <ConjuntoCard letter="B" pct={pctB} setPct={setPctB} flats={artifactBFlats} setFlats={setArtifactBFlats} />
+
+                    {showC && (
                       <ConjuntoCard letter="C" pct={pctC} setPct={setPctC} flats={artifactCFlats} setFlats={setArtifactCFlats}
                         onRemove={() => { setShowC(false); setPctC({ hp: "", atk: "", def: "", spd: "" }); setArtifactCFlats(["", ""]); }} />
-                    ) : (
-                      <button type="button" className="sw-add-btn" onClick={() => setShowC(true)}>
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
-                        </svg>
-                        CONJUNTO C
-                      </button>
                     )}
-                  </div>
-
-                  {/* Col 3: Conjunto B + (D or + button) */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    <ConjuntoCard letter="B" pct={pctB} setPct={setPctB} flats={artifactBFlats} setFlats={setArtifactBFlats} />
-                    {showD ? (
+                    {showD && (
                       <ConjuntoCard letter="D" pct={pctD} setPct={setPctD} flats={artifactDFlats} setFlats={setArtifactDFlats}
                         onRemove={() => { setShowD(false); setPctD({ hp: "", atk: "", def: "", spd: "" }); setArtifactDFlats(["", ""]); }} />
-                    ) : (
-                      <button type="button" className="sw-add-btn" onClick={() => setShowD(true)}>
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    )}
+
+                    {/* Add buttons — slim vertical strips */}
+                    {!showC && (
+                      <button type="button" className="sw-add-btn" style={{ minWidth: 44, flex: "0 0 44px" }}
+                        onClick={() => setShowC(true)}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
                         </svg>
-                        CONJUNTO D
+                        <span style={{ writingMode: "vertical-rl", fontSize: 11, letterSpacing: "0.15em" }}>CONJUNTO C</span>
+                      </button>
+                    )}
+                    {showC && !showD && (
+                      <button type="button" className="sw-add-btn" style={{ minWidth: 44, flex: "0 0 44px" }}
+                        onClick={() => setShowD(true)}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        <span style={{ writingMode: "vertical-rl", fontSize: 11, letterSpacing: "0.15em" }}>CONJUNTO D</span>
                       </button>
                     )}
                   </div>
@@ -716,8 +688,8 @@ export default function Page() {
                     <>
                       {(() => {
                         const activeKeys = ["A", "B", ...(showC ? ["C"] : []), ...(showD ? ["D"] : [])];
-                        const totals = { A: result.totalA, B: result.totalB, C: result.totalC, D: result.totalD };
-                        const dmg = { A: result.A, B: result.B, C: result.C, D: result.D };
+                        const totals: Record<string, Stats> = { A: result.totalA, B: result.totalB, C: result.totalC, D: result.totalD };
+                        const dmg: Record<string, { total: number }> = { A: result.A, B: result.B, C: result.C, D: result.D };
                         const colCount = activeKeys.length;
                         const resultColStyle = `repeat(${colCount}, 1fr)`;
                         return (
@@ -727,7 +699,7 @@ export default function Page() {
                                 const isWinner = result.winners.includes(k);
                                 const isLoser = !isWinner && result.winners.length === 1;
                                 return (
-                                  <ResultBar key={k} title={`Conjunto ${k}`} total={(dmg as any)[k].total}
+                                  <ResultBar key={k} title={`Conjunto ${k}`} total={dmg[k].total}
                                     tone={isWinner ? "good" : isLoser ? "bad" : "neutral"} />
                                 );
                               })}
@@ -735,12 +707,12 @@ export default function Page() {
 
                             <div className="sw-totals-grid">
                               <TotalsPanel rows={[
-                                { label: "HP", value: activeKeys.map((k) => fmt((totals as any)[k].hp)).join(" / ") },
-                                { label: "ATK", value: activeKeys.map((k) => fmt((totals as any)[k].atk)).join(" / ") },
+                                { label: "HP", value: activeKeys.map((k) => fmt(totals[k].hp)).join(" / ") },
+                                { label: "ATK", value: activeKeys.map((k) => fmt(totals[k].atk)).join(" / ") },
                               ]} />
                               <TotalsPanel rows={[
-                                { label: "DEF", value: activeKeys.map((k) => fmt((totals as any)[k].def)).join(" / ") },
-                                { label: "SPD", value: activeKeys.map((k) => fmt((totals as any)[k].spd)).join(" / ") },
+                                { label: "DEF", value: activeKeys.map((k) => fmt(totals[k].def)).join(" / ") },
+                                { label: "SPD", value: activeKeys.map((k) => fmt(totals[k].spd)).join(" / ") },
                               ]} />
                             </div>
 
@@ -758,14 +730,14 @@ export default function Page() {
                       })()}
                     </>
                   ) : (
-                    <div style={{ textAlign: "center", padding: "12px 0", fontSize: 13, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em" }}>
+                    <div style={{ textAlign: "center", padding: "12px 0", fontSize: 18, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em" }}>
                       Selecione um monstro para ver os resultados
                     </div>
                   )}
                 </div>
               </>
             )}
-          </div>
+        </div>
         </div>
       </main>
     </>
@@ -796,22 +768,23 @@ function ConjuntoCard(props: {
   const c = CONJUNTO_COLORS[props.letter] ?? CONJUNTO_COLORS["B"];
   return (
     <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px",
-      boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      boxShadow: "0 4px 24px rgba(0,0,0,0.4)", flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <div style={{
-          width: 28, height: 28, borderRadius: "50%",
-          background: `${c.color}22`, border: `1px solid ${c.color}55`,
+          width: 26, height: 26, borderRadius: 6,
+          background: `${c.color}25`, border: `1px solid ${c.color}70`,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 12, fontWeight: 700, color: c.color, fontFamily: "Cinzel, serif", flexShrink: 0,
+          fontSize: 14, fontWeight: 800, color: c.color,
+          fontFamily: "system-ui, sans-serif",
+          flexShrink: 0,
         }}>{props.letter}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "Cinzel, serif", fontSize: 13, color: c.labelColor, letterSpacing: "0.06em" }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+          <span style={{ fontFamily: "Cinzel, serif", fontSize: 14, color: c.labelColor, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
             Conjunto {props.letter}
-          </div>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>% DANO POR ATRIBUTO</div>
+          </span>
         </div>
         {props.onRemove && (
-          <button type="button" className="sw-remove-btn" onClick={props.onRemove} title="Remover">×</button>
+          <button type="button" className="sw-remove-btn" onClick={props.onRemove} title="Remover" style={{ flexShrink: 0 }}>×</button>
         )}
       </div>
       <ArtifactInputs s={props.pct} set={props.setPct} />
@@ -882,7 +855,7 @@ function BuffToggle(props: { label: string; sublabel?: string; checked: boolean;
         transition: "background 0.15s, border-color 0.15s",
       }}
     >
-      <span style={{ fontSize: 12, fontWeight: 600, color: props.checked ? "#a7f3d0" : "rgba(255,255,255,0.5)", fontFamily: "Rajdhani, sans-serif", letterSpacing: "0.04em" }}>
+      <span style={{ fontSize: 17, fontWeight: 600, color: props.checked ? "#a7f3d0" : "rgba(255,255,255,0.75)", fontFamily: "Rajdhani, sans-serif", letterSpacing: "0.04em" }}>
         {props.label}
       </span>
       <span onClick={(e) => e.stopPropagation()}>
@@ -905,10 +878,10 @@ function ResultBar(props: { title: string; total: number; tone: "good" | "bad" |
 
   return (
     <div style={containerStyle}>
-      <div style={{ textAlign: "center", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.4)", fontFamily: "Rajdhani, sans-serif", marginBottom: 6 }}>
+      <div style={{ textAlign: "center", fontSize: 17, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.7)", fontFamily: "Rajdhani, sans-serif", marginBottom: 6 }}>
         {props.title.toUpperCase()}
       </div>
-      <div style={{ textAlign: "center", fontSize: 30, fontWeight: 700, color: numColor, fontFamily: "Rajdhani, sans-serif", letterSpacing: "-0.02em" }}>
+      <div style={{ textAlign: "center", fontSize: 37, fontWeight: 700, color: numColor, fontFamily: "Rajdhani, sans-serif", letterSpacing: "-0.02em" }}>
         {fmt(props.total)}
       </div>
     </div>
@@ -929,8 +902,8 @@ function TotalsPanel(props: { rows: { label: string; value: string }[] }) {
             borderTop: idx === 0 ? "none" : "1px solid rgba(255,255,255,0.05)",
           }}
         >
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{r.label}</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#e8dfc0", fontFamily: "Rajdhani, sans-serif" }}>{r.value}</div>
+          <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", fontFamily: "Rajdhani, sans-serif" }}>{r.label}</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: "#e8dfc0", fontFamily: "Rajdhani, sans-serif" }}>{r.value}</div>
         </div>
       ))}
     </div>
@@ -940,7 +913,7 @@ function TotalsPanel(props: { rows: { label: string; value: string }[] }) {
 function NumberInput(props: { label: string; v: number; set: (n: number) => void }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.65)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
       <input
         className="sw-input"
         inputMode="decimal"
@@ -956,7 +929,7 @@ function NumberInput(props: { label: string; v: number; set: (n: number) => void
 function PercentInputHP(props: { label: string; v: string; set: (s: string) => void }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.65)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
           className="sw-input"
@@ -971,7 +944,7 @@ function PercentInputHP(props: { label: string; v: string; set: (s: string) => v
             props.set(s);
           }}
         />
-        <span style={{ position: "absolute", right: 10, fontSize: 11, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
+        <span style={{ position: "absolute", right: 10, fontSize: 16, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
       </div>
     </label>
   );
@@ -980,7 +953,7 @@ function PercentInputHP(props: { label: string; v: string; set: (s: string) => v
 function PercentInputInt(props: { label: string; v: string; set: (s: string) => void }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
+      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.65)", fontFamily: "Rajdhani, sans-serif" }}>{props.label}</span>
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
           className="sw-input"
@@ -990,7 +963,7 @@ function PercentInputInt(props: { label: string; v: string; set: (s: string) => 
           value={props.v}
           onChange={(e) => props.set(e.target.value.replace(/[^\d]/g, ""))}
         />
-        <span style={{ position: "absolute", right: 10, fontSize: 11, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
+        <span style={{ position: "absolute", right: 10, fontSize: 16, color: "rgba(245,200,66,0.5)", fontWeight: 600 }}>%</span>
       </div>
     </label>
   );
@@ -1031,8 +1004,8 @@ function ArtifactFlatPickers(props: {
 
 function ArtifactFlatRow(props: { label: string; value: ArtifactFlatOption; onChange: (v: ArtifactFlatOption) => void }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8, alignItems: "center" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", fontFamily: "Rajdhani, sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", fontFamily: "Rajdhani, sans-serif" }}>
         {props.label.toUpperCase()}
       </div>
       <ArtifactDropdown value={props.value} onChange={props.onChange} />
@@ -1091,7 +1064,7 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
           transition: "border-color 0.15s",
         }}
       >
-        <span style={{ fontSize: 13, fontFamily: "Rajdhani, sans-serif", fontWeight: 500 }}>
+        <span style={{ fontSize: 18, fontFamily: "Rajdhani, sans-serif", fontWeight: 500 }}>
           {!meta ? (
             <span style={{ color: "rgba(255,255,255,0.2)" }}>{PLACEHOLDER_SELECT}</span>
           ) : (
@@ -1115,8 +1088,8 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
             border: "1px solid rgba(245,200,66,0.2)",
             background: "#0d1117",
             boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+            ...(dir === "up" ? { bottom: "calc(100% + 4px)" } : { top: "calc(100% + 4px)" }),
           }}
-          className={dir === "up" ? "bottom-full mb-2" : "top-full mt-2"}
         >
           {ARTIFACT_OPTIONS.map((opt) => {
             const m = flatLabel(opt);
@@ -1134,7 +1107,7 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
                   alignItems: "center",
                   padding: "8px 12px",
                   textAlign: "left",
-                  fontSize: 13,
+                  fontSize: 18,
                   fontFamily: "Rajdhani, sans-serif",
                   fontWeight: 500,
                   cursor: "pointer",
@@ -1151,7 +1124,7 @@ function ArtifactDropdown(props: { value: ArtifactFlatOption; onChange: (v: Arti
                 ) : (
                   <>
                     <span style={{ color: "#e8dfc0" }}>{m.main} </span>
-                    <span style={{ color: "#f5c842", fontSize: 11 }}>{m.bonus}</span>
+                    <span style={{ color: "#f5c842", fontSize: 13 }}>{m.bonus}</span>
                   </>
                 )}
               </button>
@@ -1175,14 +1148,14 @@ function ChevronDown() {
    Monster Picker
 ======================= */
 
-function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: MonsterListItem | null) => void }) {
+function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: MonsterListItem | null) => void; onClear: () => void }) {
   const [q, setQ] = useState("");
   const [all, setAll] = useState<MonsterListItem[]>([]);
   const [open, setOpen] = useState(false);
   const [dir, setDir] = useState<"down" | "up">("down");
   const [loading, setLoading] = useState(false);
-
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -1197,9 +1170,7 @@ function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: Mon
         if (alive) setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -1213,29 +1184,26 @@ function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: Mon
   }, []);
 
   const updateDir = () => {
-    const root = rootRef.current;
-    if (!root) return;
-    const r = root.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - r.bottom;
-    setDir(spaceBelow < 360 ? "up" : "down");
+    const row = rowRef.current;
+    if (!row) return;
+    const r = row.getBoundingClientRect();
+    setDir(window.innerHeight - r.bottom < 320 ? "up" : "down");
   };
 
   const filtered = useMemo(() => {
     const term = (open ? q : displayMonsterName(props.value)).trim().toLowerCase();
     if (!term) return all.slice(0, 150);
-    return all
-      .filter((m) => `${m.name} ${m.element ?? ""}`.toLowerCase().includes(term))
-      .slice(0, 200);
+    return all.filter((m) => `${m.name} ${m.element ?? ""}`.toLowerCase().includes(term)).slice(0, 200);
   }, [all, q, open, props.value]);
 
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.15em", color: "rgba(245,200,66,0.6)", fontFamily: "Rajdhani, sans-serif", marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(245,200,66,0.85)", fontFamily: "Rajdhani, sans-serif", marginBottom: 8 }}>
         MONSTRO
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 8, padding: "7px 12px" }}>
+      <div ref={rowRef} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", background: "rgba(0,0,0,0.35)", border: open ? "1px solid rgba(245,200,66,0.4)" : "1px solid rgba(255,255,255,0.09)", borderRadius: 8, padding: "7px 12px", transition: "border-color 0.15s" }}>
           <input
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#e8dfc0", fontFamily: "Rajdhani, sans-serif", fontSize: 14, fontWeight: 500 }}
             placeholder={loading ? "Carregando lista..." : "Digite para buscar..."}
@@ -1243,55 +1211,43 @@ function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: Mon
             onFocus={() => {
               setOpen(true);
               setQ(props.value ? displayMonsterName(props.value) : "");
-              requestAnimationFrame(() => updateDir());
+              requestAnimationFrame(() => requestAnimationFrame(() => updateDir()));
             }}
             onChange={(e) => {
               setOpen(true);
               setQ(e.target.value);
               props.onChange(null);
-              requestAnimationFrame(() => updateDir());
+              requestAnimationFrame(() => requestAnimationFrame(() => updateDir()));
             }}
           />
+          {props.value && !open && (
+            <span style={{ color: "rgba(52,211,153,0.7)", fontSize: 12, marginLeft: 6 }}>✓</span>
+          )}
         </div>
 
         <button
           type="button"
-          onClick={() => { props.onChange(null); setQ(""); setOpen(false); }}
-          style={{
-            background: "rgba(0,0,0,0.3)",
-            border: "1px solid rgba(255,255,255,0.09)",
-            borderRadius: 8,
-            padding: "7px 14px",
-            fontSize: 12,
-            fontWeight: 600,
-            color: "rgba(255,255,255,0.4)",
-            cursor: "pointer",
-            fontFamily: "Rajdhani, sans-serif",
-            letterSpacing: "0.06em",
-            transition: "border-color 0.15s, color 0.15s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#e8dfc0"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}
+          onClick={() => { setQ(""); setOpen(false); props.onClear(); }}
+          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", cursor: "pointer", fontFamily: "Rajdhani, sans-serif", letterSpacing: "0.08em", transition: "border-color 0.15s, color 0.15s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(248,113,113,0.3)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.5)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}
         >
           LIMPAR
         </button>
       </div>
 
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 50,
-            width: "100%",
-            overflow: "hidden",
-            borderRadius: 10,
-            border: "1px solid rgba(245,200,66,0.15)",
-            background: "#0d1117",
-            boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
-          }}
-          className={dir === "up" ? "bottom-full mb-2" : "top-full mt-2"}
-        >
-          <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(245,200,66,0.5)", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "Rajdhani, sans-serif" }}>
+        <div style={{
+          position: "absolute",
+          zIndex: 9999,
+          width: "100%",
+          borderRadius: 10,
+          border: "1px solid rgba(245,200,66,0.18)",
+          background: "#0d1117",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.8)",
+          ...(dir === "up" ? { bottom: "calc(100% + 4px)" } : { top: "calc(100% + 4px)" }),
+        }}>
+          <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(245,200,66,0.65)", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "Rajdhani, sans-serif" }}>
             {loading ? "CARREGANDO..." : q.trim() ? `${filtered.length} RESULTADOS` : `${filtered.length} MONSTROS`}
           </div>
 
@@ -1301,28 +1257,13 @@ function MonsterPicker(props: { value: MonsterListItem | null; onChange: (v: Mon
                 key={m.id}
                 type="button"
                 onClick={() => { props.onChange(m); setOpen(false); }}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: "8px 12px",
-                  textAlign: "left",
-                  fontSize: 13,
-                  fontFamily: "Rajdhani, sans-serif",
-                  fontWeight: 500,
-                  color: "#e8dfc0",
-                  background: "transparent",
-                  border: "none",
-                  borderBottom: "1px solid rgba(255,255,255,0.03)",
-                  cursor: "pointer",
-                  transition: "background 0.1s",
-                }}
+                style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 13, fontFamily: "Rajdhani, sans-serif", fontWeight: 500, color: "#e8dfc0", background: "transparent", border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer", transition: "background 0.1s" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,200,66,0.07)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 {m.name}{m.element ? <span style={{ color: "rgba(245,200,66,0.5)", marginLeft: 4 }}>({m.element})</span> : ""}
               </button>
             ))}
-
             {!loading && filtered.length === 0 && (
               <div style={{ padding: "12px", fontSize: 13, color: "rgba(255,255,255,0.25)", fontFamily: "Rajdhani, sans-serif" }}>Nenhum resultado.</div>
             )}
