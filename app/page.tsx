@@ -31,6 +31,9 @@ type LeaderChoice = { attr: LeaderAttrUI; amount: number };
 
 type ArtifactFlatOption = "" | "DEF" | "ATK" | "HP";
 
+type RelicAttr = "" | "HP%" | "ATK%" | "DEF%";
+type RelicState = { attr: RelicAttr; value: number };
+
 type Buffs = { atk: boolean; def: boolean; spd: boolean };
 
 /* =======================
@@ -56,6 +59,16 @@ const ARTIFACT_FLAT_MAP: Record<ArtifactFlatOption, Stats> = {
 
 const ARTIFACT_OPTIONS: ArtifactFlatOption[] = ["", "DEF", "ATK", "HP"];
 const PLACEHOLDER_SELECT = "Selecionar…";
+
+const RELIC_ATTRS: RelicAttr[] = ["", "HP%", "ATK%", "DEF%"];
+const RELIC_ATTR_LABELS: Record<RelicAttr, string> = {
+  "":     "Selecionar…",
+  "HP%":  "HP %",
+  "ATK%": "ATK %",
+  "DEF%": "DEF %",
+};
+// Relic value range: 3–20
+const RELIC_VALUES = Array.from({ length: 18 }, (_, i) => i + 3); // [3,4,...,20]
 
 /* =======================
    Helpers
@@ -124,24 +137,35 @@ function sumArtifactFlats(picks: ArtifactFlatOption[]): Stats {
   );
 }
 
+function relicToBonus(relic: RelicState, base: { hp: number; atk: number; def: number }): Stats {
+  if (!relic.attr || relic.value <= 0) return { hp: 0, atk: 0, def: 0, spd: 0 };
+  const v = relic.value / 100;
+  switch (relic.attr) {
+    case "HP%":  return { hp: base.hp  * v, atk: 0, def: 0, spd: 0 };
+    case "ATK%": return { hp: 0, atk: base.atk * v, def: 0, spd: 0 };
+    case "DEF%": return { hp: 0, atk: 0, def: base.def * v, spd: 0 };
+    default:     return { hp: 0, atk: 0, def: 0, spd: 0 };
+  }
+}
 function calcTotals(
   monster: MonsterDetail,
   leader: LeaderChoice,
   bonus: Stats,
   isSiege: boolean,
   artifactFlat: Stats,
-  buffFlat: Stats
+  buffFlat: Stats,
+  relicFlat: Stats
 ) {
   const lp = leaderPct(leader);
   const siege = isSiege ? SIEGE_BONUS : { hp: 0, atk: 0, def: 0, spd: 0 };
 
   const total: Stats = {
-    hp: monster.max_lvl_hp * (1 + TOWERS.hp + lp.hp + siege.hp) + bonus.hp + artifactFlat.hp + buffFlat.hp,
+    hp: monster.max_lvl_hp * (1 + TOWERS.hp + lp.hp + siege.hp) + bonus.hp + artifactFlat.hp + buffFlat.hp + relicFlat.hp,
     atk:
-      monster.max_lvl_attack * (1 + TOWERS.atk + lp.atk + siege.atk) + bonus.atk + artifactFlat.atk + buffFlat.atk,
+      monster.max_lvl_attack * (1 + TOWERS.atk + lp.atk + siege.atk) + bonus.atk + artifactFlat.atk + buffFlat.atk + relicFlat.atk,
     def:
-      monster.max_lvl_defense * (1 + TOWERS.def + lp.def + siege.def) + bonus.def + artifactFlat.def + buffFlat.def,
-    spd: monster.speed * (1 + TOWERS.spd + lp.spd + siege.spd) + bonus.spd + artifactFlat.spd + buffFlat.spd,
+      monster.max_lvl_defense * (1 + TOWERS.def + lp.def + siege.def) + bonus.def + artifactFlat.def + buffFlat.def + relicFlat.def,
+    spd: monster.speed * (1 + TOWERS.spd + lp.spd + siege.spd) + bonus.spd + artifactFlat.spd + buffFlat.spd + relicFlat.spd,
   };
 
   return { total };
@@ -187,6 +211,12 @@ export default function Page() {
   const [artifactAFlats, setArtifactAFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
   const [artifactBFlats, setArtifactBFlats] = useState<[ArtifactFlatOption, ArtifactFlatOption]>(["", ""]);
 
+  const EMPTY_RELIC: RelicState = { attr: "", value: 0 };
+  const [relicA, setRelicA] = useState<RelicState>(EMPTY_RELIC);
+  const [relicB, setRelicB] = useState<RelicState>(EMPTY_RELIC);
+  const [relicC, setRelicC] = useState<RelicState>(EMPTY_RELIC);
+  const [relicD, setRelicD] = useState<RelicState>(EMPTY_RELIC);
+
   const [showC, setShowC] = useState(false);
   const [showD, setShowD] = useState(false);
   const [pctC, setPctC] = useState<PercentStatsStr>({ hp: "", atk: "", def: "", spd: "" });
@@ -213,6 +243,10 @@ export default function Page() {
     setPctD({ hp: "", atk: "", def: "", spd: "" });
     setArtifactCFlats(["", ""]);
     setArtifactDFlats(["", ""]);
+    setRelicA(EMPTY_RELIC);
+    setRelicB(EMPTY_RELIC);
+    setRelicC(EMPTY_RELIC);
+    setRelicD(EMPTY_RELIC);
   };
   // Scale the whole page to fit viewport width
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -299,10 +333,16 @@ export default function Page() {
       spd: buffs.spd ? Math.floor(towered.spd * 0.3) : 0,
     };
 
-    const { total: totalA } = calcTotals(monster, leader, bonus, isSiege, flatA, buffFlat);
-    const { total: totalB } = calcTotals(monster, leader, bonus, isSiege, flatB, buffFlat);
-    const { total: totalC } = calcTotals(monster, leader, bonus, isSiege, flatC, buffFlat);
-    const { total: totalD } = calcTotals(monster, leader, bonus, isSiege, flatD, buffFlat);
+    const baseForRelic = { hp: monster.max_lvl_hp, atk: monster.max_lvl_attack, def: monster.max_lvl_defense };
+    const rfA = relicToBonus(relicA, baseForRelic);
+    const rfB = relicToBonus(relicB, baseForRelic);
+    const rfC = relicToBonus(relicC, baseForRelic);
+    const rfD = relicToBonus(relicD, baseForRelic);
+
+    const { total: totalA } = calcTotals(monster, leader, bonus, isSiege, flatA, buffFlat, rfA);
+    const { total: totalB } = calcTotals(monster, leader, bonus, isSiege, flatB, buffFlat, rfB);
+    const { total: totalC } = calcTotals(monster, leader, bonus, isSiege, flatC, buffFlat, rfC);
+    const { total: totalD } = calcTotals(monster, leader, bonus, isSiege, flatD, buffFlat, rfD);
 
     const A = calcDamageFromPct(totalA, percentStringsToNumbers(pctA));
     const B = calcDamageFromPct(totalB, percentStringsToNumbers(pctB));
@@ -320,7 +360,7 @@ export default function Page() {
     const winnerLabel = winners.length > 1 ? "Empate" : `Conjunto ${winners[0]} vence`;
 
     return { totalA, totalB, totalC, totalD, A, B, C, D, winnerLabel, winners, maxTotal };
-  }, [monster, leader, bonus, buffs, isSiege, pctA, pctB, pctC, pctD, artifactAFlats, artifactBFlats, artifactCFlats, artifactDFlats, showC, showD]);
+  }, [monster, leader, bonus, buffs, isSiege, pctA, pctB, pctC, pctD, artifactAFlats, artifactBFlats, artifactCFlats, artifactDFlats, showC, showD, relicA, relicB, relicC, relicD]);
 
   return (
     <>
@@ -648,16 +688,16 @@ export default function Page() {
 
                   {/* Conjuntos: A + B always, C and D optional — all side by side, equal width */}
                   <div style={{ display: "flex", gap: 10, flex: 1, minWidth: 0 }}>
-                    <ConjuntoCard letter="A" pct={pctA} setPct={setPctA} flats={artifactAFlats} setFlats={setArtifactAFlats} />
-                    <ConjuntoCard letter="B" pct={pctB} setPct={setPctB} flats={artifactBFlats} setFlats={setArtifactBFlats} />
+                    <ConjuntoCard letter="A" pct={pctA} setPct={setPctA} flats={artifactAFlats} setFlats={setArtifactAFlats} relic={relicA} setRelic={setRelicA} />
+                    <ConjuntoCard letter="B" pct={pctB} setPct={setPctB} flats={artifactBFlats} setFlats={setArtifactBFlats} relic={relicB} setRelic={setRelicB} />
 
                     {showC && (
-                      <ConjuntoCard letter="C" pct={pctC} setPct={setPctC} flats={artifactCFlats} setFlats={setArtifactCFlats}
-                        onRemove={() => { setShowC(false); setPctC({ hp: "", atk: "", def: "", spd: "" }); setArtifactCFlats(["", ""]); }} />
+                      <ConjuntoCard letter="C" pct={pctC} setPct={setPctC} flats={artifactCFlats} setFlats={setArtifactCFlats} relic={relicC} setRelic={setRelicC}
+                        onRemove={() => { setShowC(false); setPctC({ hp: "", atk: "", def: "", spd: "" }); setArtifactCFlats(["", ""]); setRelicC(EMPTY_RELIC); }} />
                     )}
                     {showD && (
-                      <ConjuntoCard letter="D" pct={pctD} setPct={setPctD} flats={artifactDFlats} setFlats={setArtifactDFlats}
-                        onRemove={() => { setShowD(false); setPctD({ hp: "", atk: "", def: "", spd: "" }); setArtifactDFlats(["", ""]); }} />
+                      <ConjuntoCard letter="D" pct={pctD} setPct={setPctD} flats={artifactDFlats} setFlats={setArtifactDFlats} relic={relicD} setRelic={setRelicD}
+                        onRemove={() => { setShowD(false); setPctD({ hp: "", atk: "", def: "", spd: "" }); setArtifactDFlats(["", ""]); setRelicD(EMPTY_RELIC); }} />
                     )}
 
                     {/* Add buttons — slim vertical strips */}
@@ -763,6 +803,8 @@ function ConjuntoCard(props: {
   setPct: React.Dispatch<React.SetStateAction<PercentStatsStr>>;
   flats: [ArtifactFlatOption, ArtifactFlatOption];
   setFlats: React.Dispatch<React.SetStateAction<[ArtifactFlatOption, ArtifactFlatOption]>>;
+  relic: RelicState;
+  setRelic: React.Dispatch<React.SetStateAction<RelicState>>;
   onRemove?: () => void;
 }) {
   const c = CONJUNTO_COLORS[props.letter] ?? CONJUNTO_COLORS["B"];
@@ -790,6 +832,8 @@ function ConjuntoCard(props: {
       <ArtifactInputs s={props.pct} set={props.setPct} />
       <div className="sw-divider" style={{ margin: "14px 0" }} />
       <ArtifactFlatPickers picks={props.flats} setPicks={props.setFlats} />
+      <div className="sw-divider" style={{ margin: "14px 0" }} />
+      <RelicPicker relic={props.relic} setRelic={props.setRelic} accentColor={c.color} />
     </div>
   );
 }
@@ -1009,6 +1053,103 @@ function ArtifactFlatRow(props: { label: string; value: ArtifactFlatOption; onCh
         {props.label.toUpperCase()}
       </div>
       <ArtifactDropdown value={props.value} onChange={props.onChange} />
+    </div>
+  );
+}
+
+/* ===== Relic picker ===== */
+
+function RelicPicker(props: {
+  relic: RelicState;
+  setRelic: React.Dispatch<React.SetStateAction<RelicState>>;
+  accentColor?: string;
+}) {
+  const accent = props.accentColor ?? "#a78bfa";
+  const { relic, setRelic } = props;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
+      }}>
+        {/* Diamond gem icon */}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill={accent} style={{ opacity: 0.8, flexShrink: 0 }}>
+          <path d="M12 2L2 9l10 13L22 9z" />
+        </svg>
+        <span style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: "0.15em",
+          color: `${accent}cc`, fontFamily: "Rajdhani, sans-serif",
+          textTransform: "uppercase",
+        }}>
+          Relíquia
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "end" }}>
+        {/* Attribute selector */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.5)", fontFamily: "Rajdhani, sans-serif" }}>
+            ATRIBUTO
+          </span>
+          <select
+            className="sw-select"
+            style={{
+              fontSize: 15,
+              padding: "7px 10px",
+              color: relic.attr ? "#e8dfc0" : "rgba(255,255,255,0.22)",
+              borderColor: relic.attr ? `${accent}55` : "rgba(255,255,255,0.09)",
+            }}
+            value={relic.attr}
+            onChange={(e) => setRelic((s) => ({ ...s, attr: e.target.value as RelicAttr, value: s.value || 3 }))}
+          >
+            {RELIC_ATTRS.map((a) => (
+              <option key={a} value={a}>{RELIC_ATTR_LABELS[a]}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Value selector */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "rgba(255,255,255,0.5)", fontFamily: "Rajdhani, sans-serif" }}>
+            VALOR
+          </span>
+          <select
+            className="sw-select"
+            style={{
+              fontSize: 15,
+              padding: "7px 10px",
+              width: 72,
+              color: relic.attr ? "#e8dfc0" : "rgba(255,255,255,0.22)",
+              borderColor: relic.attr ? `${accent}55` : "rgba(255,255,255,0.09)",
+            }}
+            value={relic.value || ""}
+            disabled={!relic.attr}
+            onChange={(e) => setRelic((s) => ({ ...s, value: Number(e.target.value) }))}
+          >
+            <option value="">—</option>
+            {RELIC_VALUES.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Active badge */}
+      {relic.attr && relic.value > 0 && (
+        <div style={{
+          marginTop: 7,
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: "3px 9px", borderRadius: 9999,
+          background: `${accent}18`,
+          border: `1px solid ${accent}40`,
+          fontSize: 12, fontFamily: "Rajdhani, sans-serif", fontWeight: 600,
+          color: accent,
+        }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill={accent}><path d="M12 2L2 9l10 13L22 9z" /></svg>
+          {RELIC_ATTR_LABELS[relic.attr]} +{relic.value}%
+        </div>
+      )}
     </div>
   );
 }
